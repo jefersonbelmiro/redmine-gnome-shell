@@ -1,0 +1,25 @@
+.box-container {
+
+}
+
+.item {
+  font-weight: bold;
+  color: #ffffff;
+  background-color: rgba(10,10,10,0.7);
+  /* border-radius: 5px; */
+  padding: 0 .5em 0 .5em;
+  border: .1em solid #333;
+}
+
+.item-bug {
+}
+
+.item-acerto {
+}
+
+.item-teste {
+}
+
+.item-atribuido {
+  color : red;
+}

@@ -1,11 +1,13 @@
 .item {
   font-weight: bold;
-  color: #ffffff;
-  background-color: rgba(10,10,10,0.7);
   padding: 0 .5em 0 .5em;
   border: .1em solid #333;
 }
 
 .red {
   color : red;
+}
+
+.title {
+  font-weight: bold;
 }

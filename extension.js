@@ -2,7 +2,6 @@ let config = {
 
   user : {id : undefined, name : 'Jeferson Belmiro'},
   uri  : 'http://redmine.dbseller:8888/redmine/issues.json?query_id=18',
-  browser : 'google-chrome',
   updateTime : 60
 
 }; 
@@ -16,51 +15,127 @@ const Tweener = imports.ui.tweener;
 const Gio = imports.gi.Gio;
 const Mainloop = imports.mainloop;
 const GLib = imports.gi.GLib;
+const Pango = imports.gi.Pango;
 
+let redmine;
 let text, container, timeoutId, boxLayout, textoNova, textoTeste, textoImpedida, textoAtribuido;
+
+const Redmine = new Lang.Class({
+
+    Name: 'Redmine',
+    Extends: PanelMenu.Button,
+
+    _init: function() {
+
+        this.parent(St.Align.START);
+        
+        // label
+        // this.label = new St.Label({ text: '0 | 2 | 4', style_class: 'extension-pomodoro-label' });
+        // this.label.clutter_text.set_line_wrap(false);
+        // this.label.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+        // this.actor.add_actor(this.label);
+
+        textoNova = new St.Label({style_class: 'item', text: '0' });
+        textoNova.clutter_text.set_line_wrap(false);
+        textoNova.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+
+        textoTeste = new St.Label({style_class: 'item', text: '3' });
+        textoTeste.clutter_text.set_line_wrap(false);
+        textoTeste.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+
+        // boxLayout = new St.BoxLayout({vertical: false, style_class: 'panel-button'});
+        boxLayout = new St.BoxLayout();
+        boxLayout.add(textoNova);
+        boxLayout.add(textoTeste);
+
+        this.actor.add_actor(boxLayout);
+
+        
+        let sessionCountItem = new PopupMenu.PopupMenuItem('Tarefas novas', { style_class : 'title', reactive: false });
+        // sessionCountItem.connect('activate', Lang.bind(this, function() {
+        //    execute(['gnome-open', config.uri.replace('.json', '')]);
+        // }));
+        this.menu.addMenuItem(sessionCountItem);
+
+        this.menu.addMenuItem(new PopupMenu.PopupMenuItem('  89937 - Erro na validação do arquivo do PAD. arquivo 4810 erro "cod. campo registro do funcionário invalido'));
+        this.menu.addMenuItem(new PopupMenu.PopupMenuItem('  76388 - arquivo 4810 erro "cod. campo registro do funcionário invalido'));
+
+        // Separator
+        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+        let sessionCountItem = new PopupMenu.PopupMenuItem('Tarefas aceitas', { style_class : 'title', reactive: false });
+        this.menu.addMenuItem(sessionCountItem);
+        
+        // Separator
+        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        
+        this.connect('destroy', Lang.bind(this, this._onDestroy));
+    },
+
+    _onDestroy: function() {
+        log('Redmine::_destroy()');
+    }
+
+}); 
 
 function init(metadata) {
 
+  try {
+
+    if (!redmine) {
+      redmine = new Redmine();
+      Main.panel.addToStatusArea('redmine', redmine);
+    }
+  } catch (erro) {
+    log('Remine error: ' + erro);
+  }
+  // Main.panel._rightBox.insert_child_at_index(indicator, 0);
+
   log('init()');
 
-  textoNova = new St.Label({style_class: 'item item-nova', text: '?' });
-  textoTeste = new St.Label({style_class: 'item item-teste', text: '?' });
-  textoImpedida = new St.Label({style_class: 'item item-impedida', text: '?' });
-  textoAtribuido = new St.Label({style_class: 'item item-atribuido', text: '?' });
+  //textoNova = new St.Label({style_class: 'item item-nova', text: '?' });
+  //textoTeste = new St.Label({style_class: 'item item-teste', text: '?' });
+  //textoImpedida = new St.Label({style_class: 'item item-impedida', text: '?' });
+  //textoAtribuido = new St.Label({style_class: 'item item-atribuido', text: '?' });
 
-  container = new St.Bin({ 
-    style_class: 'panel-button',
-    reactive: true,
-    can_focus: true,
-    x_fill: true,
-    y_fill: false,
-    track_hover: true
-  });
+  //container = new St.Bin({ 
+  //  style_class: 'panel-button',
+  //  reactive: true,
+  //  can_focus: true,
+  //  x_fill: true,
+  //  y_fill: false,
+  //  track_hover: true
+  //});
 
-  boxLayout = new St.BoxLayout({vertical: false, style_class: 'panel-button'});
-  boxLayout.add(textoNova);
-  boxLayout.add(textoTeste);
-  boxLayout.add(textoImpedida);
-  boxLayout.add(textoAtribuido);
+  //boxLayout = new St.BoxLayout({vertical: false, style_class: 'panel-button'});
+  //boxLayout.add(textoNova);
+  //boxLayout.add(textoTeste);
+  //boxLayout.add(textoImpedida);
+  //boxLayout.add(textoAtribuido);
 
-  container.set_child(boxLayout);
-  container.connect('button-press-event', function() {
-    execute([config.browser, config.uri.replace('.json', '')]);
-  });
-  loop();
+  //container.set_child(boxLayout);
+  //container.connect('button-press-event', function() {
+  //  execute(['gnome-open', config.uri.replace('.json', '')]);
+  //});
+  //loop();
 }
 
 function enable() {
 
+  // Main.panel._rightBox.insert_child_at_index(container, 0);
   log('enabled()');
-  Main.panel._rightBox.insert_child_at_index(container, 0);
 }
 
 function disable() {
 
-  log('disable()');
   Main.panel._rightBox.remove_child(container);
   Mainloop.source_remove(timeoutId);
+
+  if (redmine) {
+    redmine.destroy();
+    redmine = null;
+  }
+  log('disable()');
 }
 
 function loop() {
@@ -156,6 +231,10 @@ function getIssues() {
 }
 
 function execute(argv) {
+
+  if (typeof(argv) != 'object') {
+    argv = argv.split(' ');
+  }
 
   try {
     GLib.spawn_async(null, argv, null, GLib.SpawnFlags.SEARCH_PATH, null, null);

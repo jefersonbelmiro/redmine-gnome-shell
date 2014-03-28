@@ -1,8 +1,22 @@
 let config = {
 
-  user : {id : undefined, name : 'Jeferson Belmiro'},
-  uri  : 'http://redmine.dbseller:8888/redmine/issues.json?query_id=18',
-  updateTime : 60
+    uri  : 'http://redmine.dbseller:8888/redmine',
+    queryId : 18,
+    updateTime : 60,
+    listeners : [
+        {
+            title : 'Tarefas novas',
+            status : {name : 'Nova'}
+        },
+        {
+            title : 'Tarefas aceitas',
+            status : {name : 'Aceita'}
+        },
+        {
+            title : 'Tarefas impedidas',
+            status : {id : 12, name : 'Impedida'}
+        }
+    ]
 
 }; 
 
@@ -11,234 +25,252 @@ const St = imports.gi.St;
 const Main = imports.ui.main;
 const PanelMenu = imports.ui.panelMenu;
 const PopupMenu = imports.ui.popupMenu;
-const Tweener = imports.ui.tweener;
 const Gio = imports.gi.Gio;
 const Mainloop = imports.mainloop;
 const GLib = imports.gi.GLib;
-const Pango = imports.gi.Pango;
-
-let redmine;
-let text, container, timeoutId, boxLayout, textoNova, textoTeste, textoImpedida, textoAtribuido;
 
 const Redmine = new Lang.Class({
 
-    Name: 'Redmine',
-    Extends: PanelMenu.Button,
+    Name : 'Redmine',
+    Extends : PanelMenu.Button,
 
-    _init: function() {
+    _init : function(config) {
 
         this.parent(St.Align.START);
-        
-        // label
-        // this.label = new St.Label({ text: '0 | 2 | 4', style_class: 'extension-pomodoro-label' });
-        // this.label.clutter_text.set_line_wrap(false);
-        // this.label.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
-        // this.actor.add_actor(this.label);
+        this.config = config;
+        this.listeners = config.listeners;
+        this.boxLayout = new St.BoxLayout();
+        this.labels  = [];
 
-        textoNova = new St.Label({style_class: 'item', text: '0' });
-        textoNova.clutter_text.set_line_wrap(false);
-        textoNova.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+        this.uriIssues = this.config.uri.rtrim('/') + '/issues.json';
 
-        textoTeste = new St.Label({style_class: 'item', text: '3' });
-        textoTeste.clutter_text.set_line_wrap(false);
-        textoTeste.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
+        if ('queryId' in this.config) {
+            this.uriIssues += '?query_id=' + this.config.queryId;
+        }
 
-        // boxLayout = new St.BoxLayout({vertical: false, style_class: 'panel-button'});
-        boxLayout = new St.BoxLayout();
-        boxLayout.add(textoNova);
-        boxLayout.add(textoTeste);
+        this.createLabels();
+        this.update();
 
-        this.actor.add_actor(boxLayout);
-
-        
-        let sessionCountItem = new PopupMenu.PopupMenuItem('Tarefas novas', { style_class : 'title', reactive: false });
-        // sessionCountItem.connect('activate', Lang.bind(this, function() {
-        //    execute(['gnome-open', config.uri.replace('.json', '')]);
-        // }));
-        this.menu.addMenuItem(sessionCountItem);
-
-        this.menu.addMenuItem(new PopupMenu.PopupMenuItem('  89937 - Erro na validação do arquivo do PAD. arquivo 4810 erro "cod. campo registro do funcionário invalido'));
-        this.menu.addMenuItem(new PopupMenu.PopupMenuItem('  76388 - arquivo 4810 erro "cod. campo registro do funcionário invalido'));
-
-        // Separator
-        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-
-        let sessionCountItem = new PopupMenu.PopupMenuItem('Tarefas aceitas', { style_class : 'title', reactive: false });
-        this.menu.addMenuItem(sessionCountItem);
-        
-        // Separator
-        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        
+        this.actor.add_actor(this.boxLayout);
         this.connect('destroy', Lang.bind(this, this._onDestroy));
     },
 
-    _onDestroy: function() {
-        log('Redmine::_destroy()');
+    processIssues : function () {
+
+        let issues = this.getIssues();
+
+        if (!('issues' in issues)) {
+            return;
+        }
+
+        for (let currentIssue = 0; currentIssue < issues.issues.length; currentIssue++) {
+
+            let issue = issues.issues[currentIssue];
+
+            for (let currentListener = 0; currentListener < this.listeners.length; currentListener++) {
+
+                let listener = this.listeners[currentListener];
+
+                if (this.seek(issue, listener)) {
+
+                    this.listeners[currentListener].count++;
+                    this.listeners[currentListener].issues.push(issue);
+                }
+            }
+        }
+    },
+
+    seek : function(issue, listener) {
+
+        let found = 0;
+
+        if ('status' in issue && 'status' in listener) {
+        
+           let statusId = 'id' in listener.status && listener.status.id == issue.status.id;
+           let statusName = 'name' in listener.status && listener.status.name == issue.status.name;
+            
+            if (statusId || statusName) {
+                found++;
+            }
+        }
+
+        if ('custom_fields' in issue) {
+
+            let customFound = 0;
+        
+            for (let current = 0; current < issue.custom_fields.length; current++) {
+
+                let customField = issue.custom_fields[current].value;
+            
+                if (customField.indexOf('5') === 0 || [999].inArray(customField.id)) {
+                    customFound++;
+                }
+            }
+
+            if (customFound >= 3) { 
+                this.labels[listener.index].add_style_class_name('red');
+            }
+        }
+
+        return found > 0 ? true : false;
+    },
+
+    rewindListeners : function() {
+
+        for (let current = 0; current < this.listeners.length; current++) {
+
+            this.listeners[current].index = current;
+            this.listeners[current].count = 0;
+            this.listeners[current].issues = [];
+        } 
+    },
+
+    updateLabels : function() {
+
+        for (let current = 0; current < this.listeners.length; current++) {
+            this.labels[current].set_text(String(this.listeners[current].count));
+        }
+    },
+
+    createLabels : function () {
+
+        for (let current = 0; current < this.listeners.length; current++) {
+
+            let label = new St.Label({style_class: 'item', text: '0'});
+
+            this.labels[current] = label;
+            this.boxLayout.add(label);
+        } 
+    },
+
+    createMenus : function() {
+
+        this.menu.removeAll();
+
+        for (let currentListener = 0; currentListener < this.listeners.length; currentListener++) {
+
+            let listener = this.listeners[currentListener];
+            let title = listener.title + ' (' + listener.count + ')';
+            this.menu.addMenuItem(new PopupMenu.PopupMenuItem(title, {style_class : 'title', reactive: false }));
+
+            if (listener.count == 0) {
+                continue;
+            }
+
+            for (let currentIssue = 0; currentIssue < listener.issues.length; currentIssue++) {
+
+                let issue = listener.issues[currentIssue];
+                let link = new PopupMenu.PopupMenuItem(issue.subject, {style_class : 'issue'});
+                link.connect('activate', Lang.bind(this, function() {
+                    execute(['gnome-open', this.config.uri + '/issues/' + issue.id]);
+                }));
+                this.menu.addMenuItem(link);
+            }
+
+            this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        } 
+    },
+
+    getIssues : function() {
+
+        try {
+
+            let file = Gio.file_new_for_uri(this.uriIssues);
+            let loaded = file.load_contents(null)[0];
+            if (!loaded) throw 'Error';
+            return JSON.parse(String(file.load_contents(null)[1]));
+
+        } catch (error) {
+            return {};
+        }
+    },
+
+    update : function() {
+
+        this.rewindListeners();
+        this.processIssues();
+        this.updateLabels();
+        this.createMenus();
+        this.timeoutId = Mainloop.timeout_add_seconds(this.config.updateTime, Lang.bind(this, this.update));
+    },
+
+    _onDestroy : function() {
+
+        log('Redmine.destroy()');
+        Mainloop.source_remove(this.timeoutId);
     }
 
 }); 
 
+function execute(argv) {
+
+    if (typeof(argv) != 'object') {
+        argv = argv.split(' ');
+    }
+
+    try {
+        GLib.spawn_async(null, argv, null, GLib.SpawnFlags.SEARCH_PATH, null, null);
+    } catch (error) {
+        log('[REDMINE ERROR] execute() : ' + error);
+    }
+}
+
+String.prototype.rtrim = function(value) {
+
+    if (value === undefined) {
+        let value = ' ';
+    }
+
+    let string = new String(this);
+    let end = string.length - 1;
+
+    while (string.substr(end) == value) {
+
+        string = new String(this.substr(0, end));
+        end = string.length - 1;
+    }
+
+    return string;
+}   
+
+Array.prototype.inArray = function(value) {  
+
+    for (var index in this) {
+
+        if (this[index] == value ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+let redmine;
+
 function init(metadata) {
 
-  try {
+    try {
 
-    if (!redmine) {
-      redmine = new Redmine();
-      Main.panel.addToStatusArea('redmine', redmine);
+        if (!redmine) {
+
+            redmine = new Redmine(config);
+            Main.panel.addToStatusArea('redmine', redmine);
+        }
+
+    } catch (error) {
+        log('[REMINE FATAL ERROR] ' + error);
     }
-  } catch (erro) {
-    log('Remine error: ' + erro);
-  }
-  // Main.panel._rightBox.insert_child_at_index(indicator, 0);
-
-  log('init()');
-
-  //textoNova = new St.Label({style_class: 'item item-nova', text: '?' });
-  //textoTeste = new St.Label({style_class: 'item item-teste', text: '?' });
-  //textoImpedida = new St.Label({style_class: 'item item-impedida', text: '?' });
-  //textoAtribuido = new St.Label({style_class: 'item item-atribuido', text: '?' });
-
-  //container = new St.Bin({ 
-  //  style_class: 'panel-button',
-  //  reactive: true,
-  //  can_focus: true,
-  //  x_fill: true,
-  //  y_fill: false,
-  //  track_hover: true
-  //});
-
-  //boxLayout = new St.BoxLayout({vertical: false, style_class: 'panel-button'});
-  //boxLayout.add(textoNova);
-  //boxLayout.add(textoTeste);
-  //boxLayout.add(textoImpedida);
-  //boxLayout.add(textoAtribuido);
-
-  //container.set_child(boxLayout);
-  //container.connect('button-press-event', function() {
-  //  execute(['gnome-open', config.uri.replace('.json', '')]);
-  //});
-  //loop();
 }
 
 function enable() {
-
-  // Main.panel._rightBox.insert_child_at_index(container, 0);
-  log('enabled()');
+    log('Redmine.enabled()');
 }
 
 function disable() {
 
-  Main.panel._rightBox.remove_child(container);
-  Mainloop.source_remove(timeoutId);
+    if (redmine) {
 
-  if (redmine) {
-    redmine.destroy();
-    redmine = null;
-  }
-  log('disable()');
-}
-
-function loop() {
-
-  let issues = getIssues();
-
-  if (!issues) {
-
-    timeoutId = Mainloop.timeout_add_seconds(config.updateTime, loop);
-    return;
-  }
-
-  let contador = {
-    nova: 0,
-    teste : 0,
-    impedida : 0,
-    atribuido: 0
-  };
-
-  for each(item in issues.issues) {
-
-    if ('assigned_to' in item) {
-
-      if (item.assigned_to.id == config.user.id || item.assigned_to.name.toLowerCase().indexOf(config.user.name) !== -1) {
-
-        contador.atribuido++;
-        continue;
-      }
+        redmine.destroy();
+        redmine = null;
     }
-
-    if ('status' in item) {
-
-      /**
-       * Tarefa impedida
-       */
-      if (item.status.id == 12) {
-
-        contador.impedida++;
-        continue;
-      } 
-
-      /**
-       * Tarefa em teste
-       */
-      if (item.status.name.toLowerCase().indexOf('teste') !== -1) {
-
-        contador.teste++;
-        continue;
-      } 
-
-      /**
-       * Tarefa nova ou aguardando inicio
-       */
-      if (item.status.id == 8 || item.status.name.toLowerCase().indexOf('nova') !== -1) {
-
-        contador.nova++;
-        continue;
-      } 
-    }
-  } 
-
-  textoAtribuido.remove_style_class_name('red');
-  textoImpedida.remove_style_class_name('red');
-
-  if (contador.atribuido > 1) {
-    textoAtribuido.add_style_class_name('red');
-  }
-
-  if (contador.impedida > 0) {
-    textoImpedida.add_style_class_name('red');
-  }
-
-  textoNova.set_text('' + contador.nova);
-  textoTeste.set_text('' + contador.teste); 
-  textoImpedida.set_text('' + contador.impedida); 
-  textoAtribuido.set_text('' + contador.atribuido); 
-
-  timeoutId = Mainloop.timeout_add_seconds(config.updateTime, loop);
-}
-
-function getIssues() {
-
-  let file = Gio.file_new_for_uri(config.uri);
-
-	try {
-	  file.load_contents(null)[0]
-	} catch (e if e instanceof URIError) {
-    return false;
-	}
-
-  let str = String(file.load_contents(null)[1]);
-  return JSON.parse(str);
-}
-
-function execute(argv) {
-
-  if (typeof(argv) != 'object') {
-    argv = argv.split(' ');
-  }
-
-  try {
-    GLib.spawn_async(null, argv, null, GLib.SpawnFlags.SEARCH_PATH, null, null);
-  } catch (err) {
-    log(err);
-  }
 }

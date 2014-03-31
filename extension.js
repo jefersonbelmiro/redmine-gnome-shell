@@ -3,6 +3,7 @@ let config = {
     uri  : 'http://redmine.dbseller:8888/redmine',
     queryId : 18,
     updateTime : 60,
+    opener : 'gnome-open',
     listeners : [
         {
             title : 'Tarefas novas',
@@ -41,6 +42,9 @@ const Redmine = new Lang.Class({
         this.listeners = config.listeners;
         this.boxLayout = new St.BoxLayout();
         this.labels  = [];
+
+        this.menuStyleClass = [];
+        this.labelStyleClass = [];
 
         this.uriIssues = this.config.uri.rtrim('/') + '/issues.json';
 
@@ -83,12 +87,13 @@ const Redmine = new Lang.Class({
     seek : function(issue, listener) {
 
         let found = 0;
+        let styleClass = '';
 
         if ('status' in issue && 'status' in listener) {
-        
-           let statusId = 'id' in listener.status && listener.status.id == issue.status.id;
-           let statusName = 'name' in listener.status && listener.status.name == issue.status.name;
-            
+
+            let statusId = 'id' in listener.status && listener.status.id == issue.status.id;
+            let statusName = 'name' in listener.status && issue.status.name.toLowerCase().indexOf(listener.status.name.toLowerCase()) !== -1;
+
             if (statusId || statusName) {
                 found++;
             }
@@ -100,17 +105,18 @@ const Redmine = new Lang.Class({
         
             for (let current = 0; current < issue.custom_fields.length; current++) {
 
-                let customField = issue.custom_fields[current].value;
-            
-                if (customField.indexOf('5') === 0 || [999].inArray(customField.id)) {
+                if (issue.custom_fields[current].value.indexOf('5') === 0) {
                     customFound++;
                 }
             }
 
             if (customFound >= 3) { 
-                this.labels[listener.index].add_style_class_name('red');
+                styleClass = 'red';
             }
         }
+
+        this.menuStyleClass[issue.id] = styleClass; 
+        this.labelStyleClass[listener.index] = styleClass;
 
         return found > 0 ? true : false;
     },
@@ -128,6 +134,9 @@ const Redmine = new Lang.Class({
     updateLabels : function() {
 
         for (let current = 0; current < this.listeners.length; current++) {
+
+            let styleClass = this.labelStyleClass[current] || '';
+            this.labels[current].set_style_class_name('item ' + styleClass);
             this.labels[current].set_text(String(this.listeners[current].count));
         }
     },
@@ -160,9 +169,10 @@ const Redmine = new Lang.Class({
             for (let currentIssue = 0; currentIssue < listener.issues.length; currentIssue++) {
 
                 let issue = listener.issues[currentIssue];
-                let link = new PopupMenu.PopupMenuItem(issue.subject, {style_class : 'issue'});
+                let styleClass = this.menuStyleClass[issue.id] || '';
+                let link = new PopupMenu.PopupMenuItem(issue.subject, {style_class : 'issue ' + styleClass});
                 link.connect('activate', Lang.bind(this, function() {
-                    execute(['gnome-open', this.config.uri + '/issues/' + issue.id]);
+                    execute(this.config.opener + ' ' + this.config.uri + '/issues/' + issue.id);
                 }));
                 this.menu.addMenuItem(link);
             }

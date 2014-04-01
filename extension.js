@@ -1,18 +1,43 @@
+/**
+ * Configurações
+ */
 let config = {
 
-    uri  : 'http://redmine.dbseller:8888/redmine',
-    queryId : 18,
+    /**
+     * Caminho do redmine
+     */
+    uri : 'http://redmine.dbseller:8888/redmine',
+
+    /**
+     * Parametros extras da url
+     */
+    uriQueryString : 'query_id=18',
+
+    /**
+     * Intervalo em segundos para atualizar lista de tarefas
+     */
     updateTime : 60,
+
+    /**
+     * Define o programa que ira ser executado para abrir o link da tarefa
+     */
     opener : 'gnome-open',
+
+    /**
+     * Contadores das tarefas
+     */
     listeners : [
+
         {
             title : 'Tarefas novas',
             status : {name : 'Nova'}
         },
+
         {
             title : 'Tarefas aceitas',
             status : {name : 'Aceita'}
         },
+
         {
             title : 'Tarefas impedidas',
             status : {id : 12, name : 'Impedida'}
@@ -48,15 +73,15 @@ const Redmine = new Lang.Class({
 
         this.uriIssues = this.config.uri.rtrim('/') + '/issues.json';
 
-        if ('queryId' in this.config) {
-            this.uriIssues += '?query_id=' + this.config.queryId;
+        if ('uriQueryString' in this.config) {
+            this.uriIssues += '?' + this.config.uriQueryString;
         }
 
         this.createLabels();
         this.update();
 
         this.actor.add_actor(this.boxLayout);
-        this.connect('destroy', Lang.bind(this, this._onDestroy));
+        this.connect('destroy', Lang.bind(this, this.onDestroy));
     },
 
     processIssues : function () {
@@ -77,6 +102,7 @@ const Redmine = new Lang.Class({
 
                 if (this.seek(issue, listener)) {
 
+                    this.colorize(issue, listener);
                     this.listeners[currentListener].count++;
                     this.listeners[currentListener].issues.push(issue);
                 }
@@ -86,23 +112,29 @@ const Redmine = new Lang.Class({
 
     seek : function(issue, listener) {
 
-        let found = 0;
-        let styleClass = '';
-
         if ('status' in issue && 'status' in listener) {
 
-            let statusId = 'id' in listener.status && listener.status.id == issue.status.id;
-            let statusName = 'name' in listener.status && issue.status.name.toLowerCase().indexOf(listener.status.name.toLowerCase()) !== -1;
+            if ('id' in listener.status && listener.status.id == issue.status.id) {
+                return true;
+            }
 
-            if (statusId || statusName) {
-                found++;
+            if ('name' in listener.status) {
+
+                if (issue.status.name.toLowerCase().indexOf(listener.status.name.toLowerCase()) !== -1) {
+                    return true;
+                }
             }
         }
+
+        return false;
+    },
+
+    colorize : function(issue, listener) {
 
         if ('custom_fields' in issue) {
 
             let customFound = 0;
-        
+
             for (let current = 0; current < issue.custom_fields.length; current++) {
 
                 if (issue.custom_fields[current].value.indexOf('5') === 0) {
@@ -111,14 +143,11 @@ const Redmine = new Lang.Class({
             }
 
             if (customFound >= 3) { 
-                styleClass = 'red';
+
+                this.labelStyleClass[listener.index] = 'red'; 
+                this.menuStyleClass[issue.id] = 'red'; 
             }
         }
-
-        this.menuStyleClass[issue.id] = styleClass; 
-        this.labelStyleClass[listener.index] = styleClass;
-
-        return found > 0 ? true : false;
     },
 
     rewindListeners : function() {
@@ -170,10 +199,15 @@ const Redmine = new Lang.Class({
 
                 let issue = listener.issues[currentIssue];
                 let styleClass = this.menuStyleClass[issue.id] || '';
-                let link = new PopupMenu.PopupMenuItem(issue.subject, {style_class : 'issue ' + styleClass});
+                let title = issue.subject;
+                if ('tracker' in issue) {
+                    title = '[' + issue.tracker.name.split(' ')[0] + '] ' + issue.subject;
+                }
+                let link = new PopupMenu.PopupMenuItem(title, {style_class : 'issue ' + styleClass}); 
                 link.connect('activate', Lang.bind(this, function() {
                     execute(this.config.opener + ' ' + this.config.uri + '/issues/' + issue.id);
                 }));
+
                 this.menu.addMenuItem(link);
             }
 
@@ -204,7 +238,7 @@ const Redmine = new Lang.Class({
         this.timeoutId = Mainloop.timeout_add_seconds(this.config.updateTime, Lang.bind(this, this.update));
     },
 
-    _onDestroy : function() {
+    onDestroy : function() {
 
         log('Redmine.destroy()');
         Mainloop.source_remove(this.timeoutId);

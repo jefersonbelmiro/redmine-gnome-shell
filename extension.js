@@ -1,5 +1,5 @@
 /**
- * ConfiguraÃ§Ãµes
+ * Configurações
  */
 let config = {
 
@@ -150,7 +150,10 @@ const Redmine = new Lang.Class({
         }
     },
 
-    rewindListeners : function() {
+    rewind : function() {
+
+        this.labelStyleClass = []; 
+        this.menuStyleClass = []; 
 
         for (let current = 0; current < this.listeners.length; current++) {
 
@@ -231,7 +234,7 @@ const Redmine = new Lang.Class({
 
     update : function() {
 
-        this.rewindListeners();
+        this.rewind();
         this.processIssues();
         this.updateLabels();
         this.createMenus();

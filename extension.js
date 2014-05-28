@@ -1,5 +1,5 @@
 /**
- * Configurações
+ * Configuracoes
  */
 let config = {
 
@@ -21,7 +21,7 @@ let config = {
     /**
      * Define o programa que ira ser executado para abrir o link da tarefa
      */
-    opener : 'gnome-open',
+    opener : 'firefox',
 
     /**
      * Contadores das tarefas
@@ -30,17 +30,14 @@ let config = {
 
         {
             title : 'Tarefas novas',
-            status : {name : 'Nova'}
+            status : {name : 'Nova'},
+            issueTitleMask : 'GUT: #gut | #tracker | #subject'
         },
 
         {
             title : 'Tarefas aceitas',
-            status : {name : 'Aceita'}
-        },
-
-        {
-            title : 'Tarefas impedidas',
-            status : {id : 12, name : 'Impedida'}
+            status : {name : 'Aceita'},
+            issueTitleMask : 'GUT: #gut | #tracker | #subject'
         }
     ]
 
@@ -68,10 +65,12 @@ const Redmine = new Lang.Class({
         this.boxLayout = new St.BoxLayout();
         this.labels  = [];
 
-        this.menuStyleClass = [];
-        this.labelStyleClass = [];
+        this.GUT = [];
+        this.menuStyle = [];
+        this.labelStyle = [];
 
-        this.uriIssues = this.config.uri.rtrim('/') + '/issues.json';
+        this.config.uri = this.config.uri.rtrim('/');
+        this.uriIssues = this.config.uri + '/issues.json';
 
         if ('uriQueryString' in this.config) {
             this.uriIssues += '?' + this.config.uriQueryString;
@@ -102,7 +101,7 @@ const Redmine = new Lang.Class({
 
                 if (this.seek(issue, listener)) {
 
-                    this.colorize(issue, listener);
+                    this.processCustomFields(issue, listener);
                     this.listeners[currentListener].count++;
                     this.listeners[currentListener].issues.push(issue);
                 }
@@ -129,31 +128,80 @@ const Redmine = new Lang.Class({
         return false;
     },
 
-    colorize : function(issue, listener) {
+    processCustomFields : function(issue, listener) {
 
-        if ('custom_fields' in issue) {
+        if (!('custom_fields' in issue)) {
+            return;
+        }
 
-            let customFound = 0;
+        /**
+         * "id":6, "name":"Gravidade", "value":"5 - Extremamente Grave"
+         */
+        let gravidade = 0;
 
-            for (let current = 0; current < issue.custom_fields.length; current++) {
+        /**
+         * "id":7,"name":"Urgencia","value":"5 - Extremamente Urgente"
+         */
+        let urgencia = 0;
 
-                if (issue.custom_fields[current].value.indexOf('5') === 0) {
-                    customFound++;
-                }
+        /**
+         * "id":8,"name":"Tendencia","value":"5 - Agravar Rapido"
+         */
+        let tendencia = 0;
+
+        for (let current = 0; current < issue.custom_fields.length; current++) {
+
+            let customField = issue.custom_fields[current];
+
+            if (![6, 7, 8].inArray(customField.id)) {
+                continue;
             }
 
-            if (customFound >= 3) { 
+            if (customField.id == 6) {
+                gravidade = customField.value[0];
+            }
 
-                this.labelStyleClass[listener.index] = 'red'; 
-                this.menuStyleClass[issue.id] = 'red'; 
+            if (customField.id == 7) {
+                urgencia = customField.value[0];
+            }
+
+            if (customField.id == 8) {
+                tendencia = customField.value[0];
             }
         }
+
+        let GUT = gravidade * urgencia * tendencia;
+        let style = null;
+
+        if (GUT >= 20 && GUT < 40) {
+            style = 'color: yellow';
+        }
+
+        if (GUT >= 40 && GUT < 60) {
+            style = 'color: darkorange';
+        }
+
+        if (GUT >= 60 && GUT < 100) {
+            style = 'color: brown';
+        }
+
+        if (GUT >= 100) {
+            style = 'color: red';
+        } 
+
+        if (style != null) {
+
+            this.labelStyle[GUT] = style; 
+            this.menuStyle[issue.id] = style; 
+        }
+
+        this.GUT[issue.id] = GUT; 
     },
 
     rewind : function() {
 
-        this.labelStyleClass = []; 
-        this.menuStyleClass = []; 
+        this.labelStyle = []; 
+        this.menuStyle = []; 
 
         for (let current = 0; current < this.listeners.length; current++) {
 
@@ -165,11 +213,21 @@ const Redmine = new Lang.Class({
 
     updateLabels : function() {
 
-        for (let current = 0; current < this.listeners.length; current++) {
+        for (let currentListener = 0; currentListener < this.listeners.length; currentListener++) {
 
-            let styleClass = this.labelStyleClass[current] || '';
-            this.labels[current].set_style_class_name('item ' + styleClass);
-            this.labels[current].set_text(String(this.listeners[current].count));
+            let listener = this.listeners[currentListener];
+            let gut = [0];
+
+            for (let currentIssue = 0; currentIssue < listener.issues.length; currentIssue++) {
+                gut.push(this.GUT[listener.issues[currentIssue].id]);
+            }
+
+            let max = Math.max.apply(null, gut); 
+            let style = this.labelStyle[max] || ';';
+
+            this.labels[currentListener].set_style_class_name('item');
+            this.labels[currentListener].set_style(style);
+            this.labels[currentListener].set_text(String(listener.count));
         }
     },
 
@@ -201,12 +259,20 @@ const Redmine = new Lang.Class({
             for (let currentIssue = 0; currentIssue < listener.issues.length; currentIssue++) {
 
                 let issue = listener.issues[currentIssue];
-                let styleClass = this.menuStyleClass[issue.id] || '';
-                let title = issue.subject;
+                let subject = issue.subject;
+                let GUT = this.GUT[issue.id] || 0;
+                let tracker = '';
                 if ('tracker' in issue) {
-                    title = '[' + issue.tracker.name.split(' ')[0] + '] ' + issue.subject;
+                    tracker = issue.tracker.name.split(' ')[0];
                 }
-                let link = new PopupMenu.PopupMenuItem(title, {style_class : 'issue ' + styleClass}); 
+
+                let titleLink = listener.issueTitleMask.replace('#gut', GUT).replace('#tracker', tracker).replace('#subject', issue.subject);
+                let link = new PopupMenu.PopupMenuItem(titleLink, {style_class : 'issue'}); 
+
+                if (this.menuStyle[issue.id]) {
+                    link.actor.set_style(this.menuStyle[issue.id]);
+                }
+
                 link.connect('activate', Lang.bind(this, function() {
                     execute(this.config.opener + ' ' + this.config.uri + '/issues/' + issue.id);
                 }));

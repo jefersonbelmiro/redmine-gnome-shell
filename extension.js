@@ -1,4 +1,8 @@
 /**
+ * @todo - usar GnomeSession para nao fazer requisicao quando sessao estiver parada.
+ */
+
+/**
  * Configuracoes
  */
 let config = {
@@ -6,7 +10,7 @@ let config = {
     /**
      * Caminho do redmine
      */
-    uri : 'http://redmine.dbseller:8888/redmine',
+    uri : 'http://redmine.dbseller:8888',
 
     /**
      * Parametros extras da url
@@ -31,13 +35,13 @@ let config = {
         {
             title : 'Tarefas novas',
             status : {name : 'Nova'},
-            issueTitleMask : 'GUT: #gut | #tracker | #subject'
+            issueTitleMask : '#id | GUT: #gut | #tracker | #subject'
         },
 
         {
             title : 'Tarefas aceitas',
             status : {name : 'Aceita'},
-            issueTitleMask : 'GUT: #gut | #tracker | #subject'
+            issueTitleMask : '#id | GUT: #gut | #tracker | #subject'
         }
     ]
 
@@ -72,6 +76,8 @@ const Redmine = new Lang.Class({
         this.config.uri = this.config.uri.rtrim('/');
         this.uriIssues = this.config.uri + '/issues.json';
 
+        this.issues = {};
+
         if ('uriQueryString' in this.config) {
             this.uriIssues += '?' + this.config.uriQueryString;
         }
@@ -85,7 +91,9 @@ const Redmine = new Lang.Class({
 
     processIssues : function () {
 
-        let issues = this.getIssues();
+        this.loadIssues();
+
+        let issues = this.issues;
 
         if (!('issues' in issues)) {
             return;
@@ -266,7 +274,12 @@ const Redmine = new Lang.Class({
                     tracker = issue.tracker.name.split(' ')[0];
                 }
 
-                let titleLink = listener.issueTitleMask.replace('#gut', GUT).replace('#tracker', tracker).replace('#subject', issue.subject);
+                let titleLink = listener.issueTitleMask
+                  .replace('#gut', GUT)
+                  .replace('#tracker', tracker)
+                  .replace('#subject', issue.subject)
+                  .replace('#id', issue.id);
+
                 let link = new PopupMenu.PopupMenuItem(titleLink, {style_class : 'issue'}); 
 
                 if (this.menuStyle[issue.id]) {
@@ -284,18 +297,28 @@ const Redmine = new Lang.Class({
         } 
     },
 
-    getIssues : function() {
+    loadIssues : function() {
 
-        try {
+      try {
 
-            let file = Gio.file_new_for_uri(this.uriIssues);
-            let loaded = file.load_contents(null)[0];
-            if (!loaded) throw 'Error';
-            return JSON.parse(String(file.load_contents(null)[1]));
+        let file = Gio.file_new_for_uri(this.uriIssues);
+        file.load_contents_async(null, function(f, res) {
 
-        } catch (error) {
-            return {};
-        }
+          try {
+
+            let contents = f.load_contents_finish(res)[1];
+            this.issues = JSON.parse(String(contents));
+
+          } catch (error) {
+            log('[REDMINE ERROR] loadIssues() 2 : ' + error);
+          }
+
+        }.bind(this));
+
+      } catch (error) {
+        log('[REDMINE ERROR] loadIssues() 1 : ' + error);
+      }
+
     },
 
     update : function() {

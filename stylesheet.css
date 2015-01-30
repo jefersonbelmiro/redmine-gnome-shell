@@ -1,20 +1,13 @@
-.item {
+
+.redmine-item {
   font-weight: bold;
   padding: 0 .5em 0 .5em;
   border: .1em solid #333;
 }
 
-.red {
-  color : red;
-}
-
-.orange {
-  color : darkorange;
-}
-
-.title {
+.redmine-title {
   font-weight: bold;
 }
 
-.issue {
+.redmine-issue {
 }

@@ -10,7 +10,7 @@ let config = {
     /**
      * Caminho do redmine
      */
-    uri : 'http://redmine.dbseller:8888',
+    uri : 'http://redmine.dbseller.com.br:8888',
 
     /**
      * Parametros extras da url
@@ -233,7 +233,7 @@ const Redmine = new Lang.Class({
             let max = Math.max.apply(null, gut); 
             let style = this.labelStyle[max] || ';';
 
-            this.labels[currentListener].set_style_class_name('item');
+            this.labels[currentListener].set_style_class_name('redmine-item');
             this.labels[currentListener].set_style(style);
             this.labels[currentListener].set_text(String(listener.count));
         }
@@ -243,8 +243,7 @@ const Redmine = new Lang.Class({
 
         for (let current = 0; current < this.listeners.length; current++) {
 
-            let label = new St.Label({style_class: 'item', text: '0'});
-
+            let label = new St.Label({style_class: 'redmine-item', text: '0'});
             this.labels[current] = label;
             this.boxLayout.add(label);
         } 
@@ -258,7 +257,7 @@ const Redmine = new Lang.Class({
 
             let listener = this.listeners[currentListener];
             let title = listener.title + ' (' + listener.count + ')';
-            this.menu.addMenuItem(new PopupMenu.PopupMenuItem(title, {style_class : 'title', reactive: false }));
+            this.menu.addMenuItem(new PopupMenu.PopupMenuItem(title, {style_class : 'redmine-title', reactive: false }));
 
             if (listener.count == 0) {
                 continue;
@@ -280,7 +279,7 @@ const Redmine = new Lang.Class({
                   .replace('#subject', issue.subject)
                   .replace('#id', issue.id);
 
-                let link = new PopupMenu.PopupMenuItem(titleLink, {style_class : 'issue'}); 
+                let link = new PopupMenu.PopupMenuItem(titleLink, {style_class : 'redmine-issue'}); 
 
                 if (this.menuStyle[issue.id]) {
                     link.actor.set_style(this.menuStyle[issue.id]);
